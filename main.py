@@ -10,6 +10,7 @@ import json
 GAME_CAPTION = "Tower Defense"
 COLORS = {'black': pg.color.Color('black'), 'white': pg.color.Color('white')}
 
+
 def get_mouse():
     return pg.mouse.get_pos()
 
@@ -40,6 +41,9 @@ class GenericScene:
 
     def reset(self):
         self.command = None
+
+    def check_event(self, event):
+        pass
 
 
 class MainMenu(GenericScene):
@@ -85,15 +89,27 @@ class Game(GenericScene):
         GenericScene.__init__(self)
         self.player = Player()
         self.map = [[0] * (pg.display.Info().current_w // 64)] * (pg.display.Info().current_w // 64)
+        self.map_colors = [COLORS['white'], pg.color.Color('steelblue')]
+        #x = {'name':[[0] * (pg.display.Info().current_w // 64)] * (pg.display.Info().current_w // 64)}
+        #json.dump(x, open('static/levels.json', 'w'))
         self.choose_level()
-
 
     def choose_level(self):
         """Generate tile map here (integer representation of enemy path + obstacles)"""
         with open('static/levels.json', 'r') as f:
             self.map = json.load(f)['name']
 
+    def draw_tile(self, window, pos, color):
+        tile = pg.rect.Rect(pos[0], pos[1], 64, 64)
+        window.fill(color, tile)
 
+    def draw_level(self, window):
+        for row_count, row in enumerate(self.map):
+            for tile_count, tile in enumerate(row):
+                self.draw_tile(window, (tile_count*64, row_count*64), self.map_colors[tile])
+
+    def draw(self, window):
+        self.draw_level(window)
 
 
 class Controller:
