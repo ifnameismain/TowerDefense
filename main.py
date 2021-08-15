@@ -2,12 +2,13 @@ import pygame as pg
 import os
 from pg_funcs import *
 import shelve
+import random
+import json
 
 
 # Globals
 GAME_CAPTION = "Tower Defense"
-COLORS = {'black': pg.color.Color('black')}
-
+COLORS = {'black': pg.color.Color('black'), 'white': pg.color.Color('white')}
 
 def get_mouse():
     return pg.mouse.get_pos()
@@ -83,13 +84,16 @@ class Game(GenericScene):
     def __init__(self):
         GenericScene.__init__(self)
         self.player = Player()
-        self.map = [[0] * (pg.display.Info().current_w // 16)]
-        self.create_level()
+        self.map = [[0] * (pg.display.Info().current_w // 64)] * (pg.display.Info().current_w // 64)
+        self.choose_level()
 
-    def create_level(self):
+
+    def choose_level(self):
         """Generate tile map here (integer representation of enemy path + obstacles)"""
-        for line in self.map:
-            pass
+        with open('static/levels.json', 'r') as f:
+            self.map = json.load(f)['name']
+
+
 
 
 class Controller:
