@@ -1,3 +1,5 @@
+import itertools
+
 import pygame as pg
 import os
 from pg_funcs import *
@@ -9,16 +11,14 @@ import json
 # Globals
 GAME_CAPTION = "Tower Defense"
 COLORS = {'black': pg.color.Color('black'), 'white': pg.color.Color('white')}
-
-
-def get_mouse():
-    return pg.mouse.get_pos()
+TILE_SIZE = 64
 
 
 class Player:
     def __init__(self, money=500):
         self.money = money
         self.highscore = 0
+        self.lives = 10
         self.load_player()
 
     def load_player(self):
@@ -32,11 +32,81 @@ class Player:
         d.close()
 
 
+class Enemy:
+    def __init__(self, health, speed, pos, enemy_map):
+        self.health = health
+        self.speed = speed
+        self.enemy_map = enemy_map
+        self.money = 1
+        self.radius = 15
+        self.pos = (int(-TILE_SIZE*pos), int(6.5*TILE_SIZE))
+        self.velocity = (1, 0)
+        self.enemy_map_index = 0
+        self.next_check = (self.enemy_map[self.enemy_map_index][1]*TILE_SIZE+32,
+                           self.enemy_map[self.enemy_map_index][0]*TILE_SIZE+32)
+        self.dead = False
+        self.finished = False
+
+    def draw(self, window):
+        pg.draw.circle(window, pg.color.Color('red'), self.pos, self.radius)
+
+    def move(self):
+        self.pos = (self.pos[0] + (self.velocity[0] * self.speed), self.pos[1] + (self.velocity[1] * self.speed))
+        if self.pos == self.next_check:
+            self.enemy_map_index += 1
+            if self.enemy_map_index != len(self.enemy_map):
+                self.next_check = (self.enemy_map[self.enemy_map_index][1]*TILE_SIZE+32,
+                               self.enemy_map[self.enemy_map_index][0]*TILE_SIZE+32)
+                self.velocity = (self.enemy_map[self.enemy_map_index][1]-self.enemy_map[self.enemy_map_index-1][1],
+                                 self.enemy_map[self.enemy_map_index][0]-self.enemy_map[self.enemy_map_index-1][0])
+            else:
+                pass
+        elif self.enemy_map_index == len(self.enemy_map):
+            if -self.radius > self.pos[0] or self.pos[0] > self.radius + 960 or\
+                    -self.radius > self.pos[1] or self.pos[1] > self.radius + 960:
+                self.finished = True
+
+    def check_state(self):
+        if self.health <= 0:
+            self.dead = True
+        else:
+            self.move()
+
+
+class NewRound:
+    def __init__(self, number, enemy_map):
+        self.number = number
+        self.enemy_map = enemy_map
+        self.enemies = []
+        self.generate()
+        self.started = False
+        self.ended = False
+
+    def generate(self):
+        for enemy in range(self.number+3):
+            self.enemies.append(Enemy(1, 4, len(self.enemies), self.enemy_map))
+
+    def check_state(self, player):
+        if len(self.enemies) == 0:
+            self.ended = True
+        for enemy in self.enemies.copy():
+            if enemy.dead:
+                self.enemies.remove(enemy)
+            elif enemy.finished:
+                player.lives -= 1
+                self.enemies.remove(enemy)
+            else:
+                enemy.check_state()
+
+
 class GenericScene:
     def __init__(self):
         self.command = None
 
     def draw(self, window):
+        pass
+
+    def run(self):
         pass
 
     def reset(self):
@@ -81,35 +151,98 @@ class PauseMenu(GenericScene):
 class Options(GenericScene):
     def __init__(self):
         GenericScene.__init__(self)
-        pass
+        self.menu_buttons = [
+            create_button((150, 150), (300, 100), text="Back To Main", font=FONTS['SMALL']),
+            create_button((150, 400), (300, 100), text="Options", font=FONTS['SMALL']),
+        ]
+        self.commands = [
+            'main_menu', None
+        ]
+
+    def check_event(self, event):
+        if event.type == pg.MOUSEBUTTONUP:
+            if event.button == 1:
+                x, y = get_mouse()
+                for button, command in zip(self.menu_buttons, self.commands):
+                    if button[0][0].collidepoint(x, y):
+                        self.command = command
+
+    def draw(self, window):
+        window.fill(COLORS['black'])
+        for button in self.menu_buttons:
+            window.fill(button[0][1], button[0][0])
+            blit_text_object(window, button[1])
 
 
 class Game(GenericScene):
     def __init__(self):
         GenericScene.__init__(self)
         self.player = Player()
-        self.map = [[0] * (pg.display.Info().current_w // 64)] * (pg.display.Info().current_w // 64)
-        self.map_colors = [COLORS['white'], pg.color.Color('steelblue')]
-        #x = {'name':[[0] * (pg.display.Info().current_w // 64)] * (pg.display.Info().current_w // 64)}
-        #json.dump(x, open('static/levels.json', 'w'))
+        self.map = [[0] * (pg.display.Info().current_w // TILE_SIZE)] * (pg.display.Info().current_w // TILE_SIZE)
+        self.map_colors = [pg.color.Color('gray19'), pg.color.Color('steelblue')]
+        self.map_start = (0, 0)
+        self.map_direction = (0, 1)
+        self.enemy_map = []
         self.choose_level()
+        self.create_enemy_map()
+        self.round_number = 1
+        self.current_round = NewRound(self.round_number, self.enemy_map)
 
     def choose_level(self):
         """Generate tile map here (integer representation of enemy path + obstacles)"""
         with open('static/levels.json', 'r') as f:
             self.map = json.load(f)['name']
+        self.map_start = (6, 0)
+        self.map_direction = (0, 1)
 
-    def draw_tile(self, window, pos, color):
-        tile = pg.rect.Rect(pos[0], pos[1], 64, 64)
-        window.fill(color, tile)
+    def create_enemy_map(self):
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        finished = False
+        self.enemy_map.append(self.map_start)
+        while not finished:
+            finished = True
+            for direct in directions:
+                if direct[0] == int(-self.map_direction[0]) and direct[1] == int(-self.map_direction[1]):
+                    continue
+                elif 0 <= self.map_start[0]+direct[0] < len(self.map) and\
+                        0 <= self.map_start[1]+direct[1] < len(self.map[0]):
+                    if self.map[self.map_start[0]+direct[0]][self.map_start[1]+direct[1]] == 1:
+                        self.map_direction = direct
+                        self.map_start = (self.map_start[0]+direct[0], self.map_start[1]+direct[1])
+                        self.enemy_map.append(self.map_start)
+                        finished = False
+                        break
+                    else:
+                        pass
 
     def draw_level(self, window):
         for row_count, row in enumerate(self.map):
             for tile_count, tile in enumerate(row):
-                self.draw_tile(window, (tile_count*64, row_count*64), self.map_colors[tile])
+                draw_tile(window, (tile_count*TILE_SIZE, row_count*TILE_SIZE), self.map_colors[tile])
+
+    def draw_ui(self, window):
+        pass
+
+    def run(self):
+        if self.player.lives <= 0:
+            pass
+        if self.current_round.started:
+            self.current_round.check_state(self.player)
+        if self.current_round.ended:
+            self.round_number += 1
+            self.current_round = NewRound(self.round_number, self.enemy_map)
+
+    def check_event(self, event):
+        if not self.current_round.started:
+            if event.type == pg.MOUSEBUTTONDOWN:
+                self.current_round.started = True
 
     def draw(self, window):
         self.draw_level(window)
+        self.draw_ui(window)
+        if self.current_round.started:
+            for enemy in self.current_round.enemies:
+                enemy.draw(window)
 
 
 class Controller:
@@ -140,6 +273,7 @@ class Controller:
             self.clock.tick(self.frame_rate)
             self.sort_events()
             self.check_for_switch()
+            self.current_scene.run()
             self.current_scene.draw(self.window)
             pg.display.update()
 

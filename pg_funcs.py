@@ -44,7 +44,16 @@ def create_button(pos, size, color=pg.color.Color('white'),
                   text_color=pg.color.Color('black'), text=None, font=None):
     _rect = (pg.rect.Rect(pos[0], pos[1], size[0], size[1]), color)
     if text:
-        text_obj = centred_text(text, font, (pos[0]+0.5*size[0],pos[1]+0.5*size[1]), text_color)
+        text_obj = centred_text(text, font, (pos[0]+0.5*size[0], pos[1]+0.5*size[1]), text_color)
         return _rect, text_obj
     else:
         return _rect
+
+
+def get_mouse():
+    return pg.mouse.get_pos()
+
+
+def draw_tile(window, pos, color):
+    tile = pg.rect.Rect(pos[0], pos[1], 64, 64)
+    window.fill(color, tile)
