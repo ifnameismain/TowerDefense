@@ -1,35 +1,13 @@
-import itertools
-
 import pygame as pg
 import os
 from pg_funcs import *
 import shelve
-import random
 import json
 
 
 # Globals
 GAME_CAPTION = "Tower Defense"
-COLORS = {'black': pg.color.Color('black'), 'white': pg.color.Color('white')}
 TILE_SIZE = 64
-
-
-class Player:
-    def __init__(self, money=500):
-        self.money = money
-        self.highscore = 0
-        self.lives = 10
-        self.load_player()
-
-    def load_player(self):
-        d = shelve.open('player')
-        self.highscore = d['highscore']
-        d.close()
-
-    def save_player(self):
-        d = shelve.open('player')
-        d['highscore'] = self.highscore
-        d.close()
 
 
 class Enemy:
@@ -56,7 +34,7 @@ class Enemy:
             self.enemy_map_index += 1
             if self.enemy_map_index != len(self.enemy_map):
                 self.next_check = (self.enemy_map[self.enemy_map_index][1]*TILE_SIZE+32,
-                               self.enemy_map[self.enemy_map_index][0]*TILE_SIZE+32)
+                                   self.enemy_map[self.enemy_map_index][0]*TILE_SIZE+32)
                 self.velocity = (self.enemy_map[self.enemy_map_index][1]-self.enemy_map[self.enemy_map_index-1][1],
                                  self.enemy_map[self.enemy_map_index][0]-self.enemy_map[self.enemy_map_index-1][0])
             else:
@@ -92,8 +70,9 @@ class NewRound:
         for enemy in self.enemies.copy():
             if enemy.dead:
                 self.enemies.remove(enemy)
+                player['money'] += enemy.money
             elif enemy.finished:
-                player.lives -= 1
+                player['lives'] -= 1
                 self.enemies.remove(enemy)
             else:
                 enemy.check_state()
@@ -120,8 +99,8 @@ class MainMenu(GenericScene):
     def __init__(self):
         GenericScene.__init__(self)
         self.menu_buttons = [
-            create_button((150, 150), (300, 100), text="Play", font=FONTS['SMALL']),
-            create_button((150, 400), (300, 100), text="Options", font=FONTS['SMALL']),
+            create_button((150, 150), (300, 100), text="Play", font=FONTS['MEDIUM']),
+            create_button((150, 400), (300, 100), text="Options", font=FONTS['MEDIUM']),
         ]
         self.commands = [
             'map', 'options'
@@ -136,7 +115,7 @@ class MainMenu(GenericScene):
                         self.command = command
 
     def draw(self, window):
-        window.fill(COLORS['black'])
+        window.fill(pg.color.Color('black'))
         for button in self.menu_buttons:
             window.fill(button[0][1], button[0][0])
             blit_text_object(window, button[1])
@@ -152,8 +131,8 @@ class Options(GenericScene):
     def __init__(self):
         GenericScene.__init__(self)
         self.menu_buttons = [
-            create_button((150, 150), (300, 100), text="Back To Main", font=FONTS['SMALL']),
-            create_button((150, 400), (300, 100), text="Options", font=FONTS['SMALL']),
+            create_button((150, 150), (300, 100), text="Back To Main", font=FONTS['MEDIUM']),
+            create_button((150, 400), (300, 100), text="Options", font=FONTS['MEDIUM']),
         ]
         self.commands = [
             'main_menu', None
@@ -168,7 +147,7 @@ class Options(GenericScene):
                         self.command = command
 
     def draw(self, window):
-        window.fill(COLORS['black'])
+        window.fill(pg.color.Color('black'))
         for button in self.menu_buttons:
             window.fill(button[0][1], button[0][0])
             blit_text_object(window, button[1])
@@ -177,7 +156,7 @@ class Options(GenericScene):
 class Game(GenericScene):
     def __init__(self):
         GenericScene.__init__(self)
-        self.player = Player()
+        self.player = {"money": 500, "lives": 10}
         self.map = [[0] * (pg.display.Info().current_w // TILE_SIZE)] * (pg.display.Info().current_w // TILE_SIZE)
         self.map_colors = [pg.color.Color('gray19'), pg.color.Color('steelblue')]
         self.map_start = (0, 0)
@@ -186,6 +165,14 @@ class Game(GenericScene):
         self.choose_level()
         self.create_enemy_map()
         self.round_number = 1
+        self.menu_buttons = [
+            create_button((960, 0), (256, 100), text="Towers", font=FONTS['MEDIUM'],
+                          text_color=pg.color.Color('gold')),
+            create_button((0, 0), (300, 50), text=f"Lives: {self.player['lives']}",
+                          font=FONTS['SMALL'],text_color=pg.color.Color('gold')),
+            create_button((300, 0), (300, 50), text=f"${self.player['money']}",
+                          font=FONTS['SMALL'], text_color=pg.color.Color('gold')),
+        ]
         self.current_round = NewRound(self.round_number, self.enemy_map)
 
     def choose_level(self):
@@ -221,10 +208,12 @@ class Game(GenericScene):
                 draw_tile(window, (tile_count*TILE_SIZE, row_count*TILE_SIZE), self.map_colors[tile])
 
     def draw_ui(self, window):
-        pass
+        window.fill(pg.color.Color('aquamarine'), pg.rect.Rect(960, 0, 256, 960))
+        for button in self.menu_buttons:
+            blit_text_object(window, button[1])
 
     def run(self):
-        if self.player.lives <= 0:
+        if self.player["lives"] <= 0:
             pass
         if self.current_round.started:
             self.current_round.check_state(self.player)
@@ -282,9 +271,10 @@ if __name__ == "__main__":
     os.environ["SDL_VIDEO_CENTERED"] = "True"
     pg.init()
     FONTS = {"BIG": pg.font.SysFont("helvetica", 100, True),
-             "SMALL": pg.font.SysFont("helvetica", 50, True)}
+             "MEDIUM": pg.font.SysFont("helvetica", 50, True),
+             "SMALL": pg.font.SysFont("helvetica", 30, True)}
     pg.display.set_caption(GAME_CAPTION)
     display_info = pg.display.Info()
     SCREEN_SIZE = (display_info.current_w, display_info.current_h)
-    pg.display.set_mode((960, 960))
+    pg.display.set_mode((960+256, 960))
     Controller().main_loop()
