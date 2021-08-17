@@ -1,7 +1,9 @@
+import math
+
 import pygame as pg
 import os
 from pg_funcs import *
-import shelve
+from turrets_module import *
 import json
 
 
@@ -165,14 +167,17 @@ class Game(GenericScene):
         self.choose_level()
         self.create_enemy_map()
         self.round_number = 1
-        self.menu_buttons = [
+        self.ui_buttons = [
             create_button((960, 0), (256, 100), text="Towers", font=FONTS['MEDIUM'],
-                          text_color=pg.color.Color('gold')),
+                          text_color=pg.color.Color('red'))]
+        self.player_buttons = [
             create_button((0, 0), (300, 50), text=f"Lives: {self.player['lives']}",
-                          font=FONTS['SMALL'],text_color=pg.color.Color('gold')),
+                          font=FONTS['SMALL'], text_color=pg.color.Color('gold')),
             create_button((300, 0), (300, 50), text=f"${self.player['money']}",
                           font=FONTS['SMALL'], text_color=pg.color.Color('gold')),
         ]
+        self.tower_options = [BasicTurret()]
+        self.towers = [BasicTurret()]
         self.current_round = NewRound(self.round_number, self.enemy_map)
 
     def choose_level(self):
@@ -202,6 +207,14 @@ class Game(GenericScene):
                     else:
                         pass
 
+    def redo_player_ui(self):
+        self.player_buttons = [
+            create_button((0, 0), (300, 50), text=f"Lives: {self.player['lives']}",
+                          font=FONTS['SMALL'], text_color=pg.color.Color('gold')),
+            create_button((300, 0), (300, 50), text=f"${self.player['money']}",
+                          font=FONTS['SMALL'], text_color=pg.color.Color('gold')),
+        ]
+
     def draw_level(self, window):
         for row_count, row in enumerate(self.map):
             for tile_count, tile in enumerate(row):
@@ -209,7 +222,9 @@ class Game(GenericScene):
 
     def draw_ui(self, window):
         window.fill(pg.color.Color('aquamarine'), pg.rect.Rect(960, 0, 256, 960))
-        for button in self.menu_buttons:
+        for button in self.ui_buttons:
+            blit_text_object(window, button[1])
+        for button in self.player_buttons:
             blit_text_object(window, button[1])
 
     def run(self):
@@ -217,6 +232,12 @@ class Game(GenericScene):
             pass
         if self.current_round.started:
             self.current_round.check_state(self.player)
+            for tower in self.towers:
+                for enemy in self.current_round.enemies:
+                    if math.sqrt((enemy.pos[0]-(tower.x+32))**2+(enemy.pos[1]-(tower.y+32))**2) <= tower.range:
+                        tower.change_angle(*enemy.pos)
+                        break
+            self.redo_player_ui()
         if self.current_round.ended:
             self.round_number += 1
             self.current_round = NewRound(self.round_number, self.enemy_map)
@@ -228,13 +249,16 @@ class Game(GenericScene):
 
     def draw(self, window):
         self.draw_level(window)
-        self.draw_ui(window)
         if self.current_round.started:
             for enemy in self.current_round.enemies:
                 enemy.draw(window)
+        for tower in self.towers:
+            tower.draw(window)
+        self.draw_ui(window)
 
 
 class Controller:
+    """Controller holds pygame things and passes events to current frame"""
     def __init__(self):
         self.frame_rate = 30
         self.timer = 0
@@ -270,9 +294,9 @@ class Controller:
 if __name__ == "__main__":
     os.environ["SDL_VIDEO_CENTERED"] = "True"
     pg.init()
-    FONTS = {"BIG": pg.font.SysFont("helvetica", 100, True),
-             "MEDIUM": pg.font.SysFont("helvetica", 50, True),
-             "SMALL": pg.font.SysFont("helvetica", 30, True)}
+    FONTS = {"BIG": pg.font.SysFont("arial", 100, True),
+             "MEDIUM": pg.font.SysFont("arial", 50, True),
+             "SMALL": pg.font.SysFont("arial", 30, True)}
     pg.display.set_caption(GAME_CAPTION)
     display_info = pg.display.Info()
     SCREEN_SIZE = (display_info.current_w, display_info.current_h)
